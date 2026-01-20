@@ -91,4 +91,6 @@ done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
 echo "Uploaded: $upload_count"
 if [[ $upload_failed -gt 0 ]]; then
   echo "Upload failures: $upload_failed (see $UPLOAD_LOG)"
+  echo "--- Upload failure details ---"
+  cat "$UPLOAD_LOG"
 fi
