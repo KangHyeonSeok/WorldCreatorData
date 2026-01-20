@@ -52,30 +52,35 @@ project_ref="$(echo "$SUPABASE_PROJECT_URL" | sed -E 's|https?://([^.]+).*|\1|')
 urlencode() {
   python3 - <<'PY' "$1"
 import sys
-import urllib.parse
-print(urllib.parse.quote(sys.argv[1]))
-PY
-}
+upload_file() {
+  local file="$1"
+  local rel_path="$2"
+  local content_type="$3"
+  local storage_rel_path
+  local encoded_path
+  local upload_url
+  local response_file
+  local http_status
 
-upload_count=0
-upload_failed=0
+  storage_rel_path="$(sanitize_key "$rel_path")"
 
-while IFS= read -r -d '' file; do
-  rel_path="${file#$OUT_DIR/}"
-
-  if supabase storage cp "$file" "supabase://$SUPABASE_BUCKET_NAME/$rel_path" --content-type image/avif --overwrite --project-ref "$project_ref" >/dev/null 2>&1; then
-    upload_count=$((upload_count + 1))
-    continue
+  if [[ "$storage_rel_path" != "$rel_path" ]]; then
+    echo "Sanitized key: $rel_path -> $storage_rel_path"
   fi
 
-  encoded_path="$(urlencode "$rel_path")"
+  if supabase storage cp "$file" "supabase://$SUPABASE_BUCKET_NAME/$storage_rel_path" --content-type "$content_type" --overwrite --project-ref "$project_ref" >/dev/null 2>&1; then
+    upload_count=$((upload_count + 1))
+    return 0
+  fi
+
+  encoded_path="$(urlencode "$storage_rel_path")"
   upload_url="$SUPABASE_PROJECT_URL/storage/v1/object/$SUPABASE_BUCKET_NAME/$encoded_path"
 
   response_file="$(mktemp)"
   http_status="$(curl -sS -o "$response_file" -w "%{http_code}" -X PUT \
     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-    -H "Content-Type: image/avif" \
+    -H "Content-Type: $content_type" \
     --data-binary "@$file" \
     "$upload_url" || true)"
 
@@ -84,6 +89,19 @@ while IFS= read -r -d '' file; do
   else
     echo "$rel_path | status=$http_status | url=$upload_url | response=$(tr -d '\n' < "$response_file")" >> "$UPLOAD_LOG"
     upload_failed=$((upload_failed + 1))
+  fi
+  rm -f "$response_file"
+}
+
+while IFS= read -r -d '' file; do
+  rel_path="${file#$OUT_DIR/}"
+  upload_file "$file" "$rel_path" "image/avif"
+done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
+
+while IFS= read -r -d '' file; do
+  rel_path="${file#./}"
+  upload_file "$file" "$rel_path" "text/plain; charset=utf-8"
+done < <(find . -type f -name "*.txt" -print0)
   fi
   rm -f "$response_file"
 done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
