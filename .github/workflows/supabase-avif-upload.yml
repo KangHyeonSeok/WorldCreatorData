@@ -1,0 +1,36 @@
+name: Convert PNG to AVIF and upload to Supabase
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  convert-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install libavif tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libavif-bin
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Convert PNG and upload AVIF
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_BUCKET_NAME: ${{ secrets.SUPABASE_BUCKET_NAME }}
+          AVIFENC_ARGS: "--min 20 --max 20 --speed 6"
+        run: |
+          chmod +x scripts/ci/convert_upload.sh
+          bash scripts/ci/convert_upload.sh
