@@ -71,18 +71,21 @@ while IFS= read -r -d '' file; do
   encoded_path="$(urlencode "$rel_path")"
   upload_url="$SUPABASE_PROJECT_URL/storage/v1/object/$SUPABASE_BUCKET_NAME/$encoded_path"
 
-  if curl -sS -X PUT \
+  response_file="$(mktemp)"
+  http_status="$(curl -sS -o "$response_file" -w "%{http_code}" -X PUT \
     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
     -H "Content-Type: image/avif" \
     --data-binary "@$file" \
-    "$upload_url" \
-    >/dev/null; then
+    "$upload_url" || true)"
+
+  if [[ "$http_status" == 2* ]]; then
     upload_count=$((upload_count + 1))
   else
-    echo "$rel_path" >> "$UPLOAD_LOG"
+    echo "$rel_path | status=$http_status | url=$upload_url | response=$(tr -d '\n' < "$response_file")" >> "$UPLOAD_LOG"
     upload_failed=$((upload_failed + 1))
   fi
+  rm -f "$response_file"
 done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
 
 echo "Uploaded: $upload_count"
