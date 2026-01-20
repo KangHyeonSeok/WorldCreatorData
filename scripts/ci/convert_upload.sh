@@ -52,6 +52,34 @@ project_ref="$(echo "$SUPABASE_PROJECT_URL" | sed -E 's|https?://([^.]+).*|\1|')
 urlencode() {
   python3 - <<'PY' "$1"
 import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1]))
+PY
+}
+
+sanitize_key() {
+  python3 - <<'PY' "$1"
+import sys
+
+allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.//")
+text = sys.argv[1]
+out = []
+for ch in text:
+    if ch in allowed:
+        out.append(ch)
+        continue
+    code = ord(ch)
+    if code <= 0xFFFF:
+        out.append(f"_u{code:04X}_")
+    else:
+        out.append(f"_U{code:08X}_")
+print("".join(out))
+PY
+}
+
+upload_count=0
+upload_failed=0
+
 upload_file() {
   local file="$1"
   local rel_path="$2"
@@ -102,9 +130,6 @@ while IFS= read -r -d '' file; do
   rel_path="${file#./}"
   upload_file "$file" "$rel_path" "text/plain; charset=utf-8"
 done < <(find . -type f -name "*.txt" -print0)
-  fi
-  rm -f "$response_file"
-done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
 
 echo "Uploaded: $upload_count"
 if [[ $upload_failed -gt 0 ]]; then
