@@ -31,8 +31,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_BUCKET_NAME: ${{ secrets.SUPABASE_BUCKET_NAME }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PNGQUANT_ARGS: "--quality=60-85 --speed 1"
-          WEBPENC_ARGS: "-q 80 -m 6"
+          PNGQUANT_ARGS: "--quality=80-95 --speed 1"
+          WEBPENC_ARGS: "-q 90 -m 6"
         run: |
           chmod +x scripts/ci/convert_upload.sh
           bash scripts/ci/convert_upload.sh
