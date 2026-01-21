@@ -1,4 +1,4 @@
-name: Convert PNG to AVIF and upload to Supabase
+name: Convert PNG to WebP and upload to Supabase
 
 on:
   push:
@@ -15,23 +15,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install libavif tools
+      - name: Install pngquant and WebP tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libavif-bin
+          sudo apt-get install -y pngquant webp
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      - name: Convert PNG and upload AVIF
+      - name: Convert PNG and upload WebP
         env:
           SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_BUCKET_NAME: ${{ secrets.SUPABASE_BUCKET_NAME }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          AVIFENC_ARGS: "--min 20 --max 20 --speed 6"
+          PNGQUANT_ARGS: "--quality=60-85 --speed 1"
+          WEBPENC_ARGS: "-q 80 -m 6"
         run: |
           chmod +x scripts/ci/convert_upload.sh
           bash scripts/ci/convert_upload.sh

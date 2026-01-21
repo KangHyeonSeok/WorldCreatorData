@@ -2,18 +2,21 @@
 set -euo pipefail
 
 ROOT_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
-OUT_DIR="${AVIF_OUT_DIR:-${RUNNER_TEMP:-/tmp}/avif-output}"
-LOG_DIR="${AVIF_LOG_DIR:-${RUNNER_TEMP:-/tmp}/avif-logs}"
+OUT_DIR="${WEBP_OUT_DIR:-${RUNNER_TEMP:-/tmp}/webp-output}"
+LOG_DIR="${WEBP_LOG_DIR:-${RUNNER_TEMP:-/tmp}/webp-logs}"
 
 mkdir -p "$OUT_DIR" "$LOG_DIR"
 
 CONVERT_LOG="$LOG_DIR/convert_failures.log"
+PNGQUANT_LOG="$LOG_DIR/pngquant_failures.log"
 UPLOAD_LOG="$LOG_DIR/upload_failures.log"
 
 : > "$CONVERT_LOG"
+: > "$PNGQUANT_LOG"
 : > "$UPLOAD_LOG"
 
-AVIFENC_ARGS="${AVIFENC_ARGS:---min 20 --max 20 --speed 6}"
+PNGQUANT_ARGS="${PNGQUANT_ARGS:---quality=80-95 --speed 1}"
+WEBPENC_ARGS="${WEBPENC_ARGS:---q 90 -m 6}"
 
 if [[ -z "${SUPABASE_PROJECT_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" || -z "${SUPABASE_BUCKET_NAME:-}" ]]; then
   echo "Missing required environment variables: SUPABASE_PROJECT_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_BUCKET_NAME" >&2
@@ -29,22 +32,31 @@ echo "Scanning for PNG files under: $ROOT_DIR"
 
 while IFS= read -r -d '' file; do
   rel_path="${file#./}"
-  out_path="$OUT_DIR/${rel_path%.*}.avif"
+  rel_no_ext="${rel_path%.*}"
+  tmp_dir="$OUT_DIR/.pngquant"
+  tmp_path="$tmp_dir/$rel_no_ext.png"
+  out_path="$OUT_DIR/$rel_no_ext.webp"
 
-  mkdir -p "$(dirname "$out_path")"
+  mkdir -p "$(dirname "$out_path")" "$(dirname "$tmp_path")"
 
-  if avifenc $AVIFENC_ARGS "$file" "$out_path" >/dev/null 2>&1; then
-    converted_count=$((converted_count + 1))
+  if pngquant $PNGQUANT_ARGS --output "$tmp_path" -- "$file" >/dev/null 2>&1; then
+    if cwebp $WEBPENC_ARGS "$tmp_path" -o "$out_path" >/dev/null 2>&1; then
+      converted_count=$((converted_count + 1))
+    else
+      echo "$rel_path" >> "$CONVERT_LOG"
+      convert_failed=$((convert_failed + 1))
+      rm -f "$out_path"
+    fi
   else
-    echo "$rel_path" >> "$CONVERT_LOG"
+    echo "$rel_path" >> "$PNGQUANT_LOG"
     convert_failed=$((convert_failed + 1))
-    rm -f "$out_path"
+    rm -f "$tmp_path" "$out_path"
   fi
 done < <(find . -type f -name "*.png" -print0)
 
 echo "Converted: $converted_count"
 if [[ $convert_failed -gt 0 ]]; then
-  echo "Convert failures: $convert_failed (see $CONVERT_LOG)"
+  echo "Convert failures: $convert_failed (see $CONVERT_LOG, $PNGQUANT_LOG)"
 fi
 
 project_ref="$(echo "$SUPABASE_PROJECT_URL" | sed -E 's|https?://([^.]+).*|\1|')"
@@ -123,8 +135,8 @@ upload_file() {
 
 while IFS= read -r -d '' file; do
   rel_path="${file#$OUT_DIR/}"
-  upload_file "$file" "$rel_path" "image/avif"
-done < <(find "$OUT_DIR" -type f -name "*.avif" -print0)
+  upload_file "$file" "$rel_path" "image/webp"
+done < <(find "$OUT_DIR" -type f -name "*.webp" -print0)
 
 while IFS= read -r -d '' file; do
   rel_path="${file#./}"
